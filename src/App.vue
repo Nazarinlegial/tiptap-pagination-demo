@@ -5,11 +5,11 @@ import MultiEditorPagination from './components/MultiEditorPagination.vue'
 
 // 处理函数
 const openGitHub = () => {
-  window.open('https://github.com/your-username/editor-plus', '_blank')
+  window.open('https://github.com/Cassielxd/tiptap-pagination-demo', '_blank')
 }
 
 const openEmail = () => {
-  window.location.href = 'mailto:your-email@example.com'
+  window.location.href = 'mailto:348040933@qq.com'
 }
 </script>
 
