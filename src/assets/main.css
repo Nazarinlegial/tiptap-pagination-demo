@@ -1,0 +1,96 @@
+@import './base.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义组件样式 */
+@layer components {
+  .editor-button {
+    @apply inline-flex items-center justify-center h-8 px-3 text-sm font-medium transition-colors duration-200 border border-gray-300 rounded hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50;
+  }
+  
+  .editor-button-active {
+    @apply bg-primary text-white border-primary;
+  }
+  
+  .editor-toolbar {
+    @apply flex items-center gap-2 p-3 bg-gray-50 border-b border-gray-200 flex-wrap;
+  }
+  
+  .editor-content {
+    @apply min-h-96 bg-white;
+  }
+  
+  .editor-container {
+    @apply bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200;
+  }
+}
+
+/* 富文本编辑器专用样式 */
+@layer utilities {
+  .prose-editor {
+    @apply text-gray-900 leading-relaxed;
+  }
+  
+  .prose-editor h1 {
+    @apply text-2xl font-bold mt-4 mb-2 text-gray-900;
+  }
+  
+  .prose-editor h2 {
+    @apply text-xl font-bold mt-3 mb-2 text-gray-900;
+  }
+  
+  .prose-editor h3 {
+    @apply text-lg font-bold mt-3 mb-2 text-gray-900;
+  }
+  
+  .prose-editor p {
+    @apply my-2;
+  }
+  
+  .prose-editor ul, .prose-editor ol {
+    @apply pl-6 my-2;
+  }
+  
+  .prose-editor blockquote {
+    @apply border-l-4 border-gray-300 pl-4 my-4 text-gray-600;
+  }
+  
+  .prose-editor hr {
+    @apply border-0 border-t border-gray-300 my-6;
+  }
+  
+  .prose-editor table {
+    @apply border-collapse w-full my-4 border border-gray-300;
+  }
+  
+  .prose-editor table td, .prose-editor table th {
+    @apply border border-gray-300 px-2 py-2 relative;
+  }
+  
+  .prose-editor table th {
+    @apply bg-gray-50 font-bold;
+  }
+}
+
+/* 覆盖一些基础样式 */
+#app {
+  @apply w-full max-w-none;
+}
+
+/* 保留一些原有的样式 */
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}
+
+
