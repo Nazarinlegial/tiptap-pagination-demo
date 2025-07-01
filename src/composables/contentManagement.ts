@@ -6,6 +6,14 @@ export interface ContentSplitResult {
   overflowContent: any[]
 }
 
+// 光标位置分析结果
+export interface CursorAnalysisResult {
+  cursorPosition: number
+  splitPosition: number
+  cursorInFirstPart: boolean
+  shouldPreserveCursor: boolean
+}
+
 // 将文档内容按指定分割点分割
 export const splitDocumentContent = (doc: any, splitPoint: number): ContentSplitResult => {
   const firstPageNodes: any[] = []
@@ -29,6 +37,41 @@ export const splitDocumentContent = (doc: any, splitPoint: number): ContentSplit
   }
 
   return { firstPageContent, overflowContent: overflowNodes }
+}
+
+// 分析光标位置相对于分割点的关系
+export const analyzeCursorPosition = (editor: any, splitPoint: number): CursorAnalysisResult => {
+  const { state } = editor
+  const { selection, doc } = state
+  const cursorPos = selection.from
+  
+  // 计算分割点在文档中的实际位置
+  let splitPosition = 1 // 文档开始位置
+  for (let i = 0; i < splitPoint && i < doc.content.childCount; i++) {
+    if (i === splitPoint - 1) {
+      // 分割点在这个节点的末尾
+      splitPosition += doc.content.child(i).nodeSize
+      break
+    } else {
+      splitPosition += doc.content.child(i).nodeSize
+    }
+  }
+  
+  const cursorInFirstPart = cursorPos <= splitPosition
+  
+  // 判断是否应该保持光标在原位置
+  // 如果光标在分割点之前，肯定要保持
+  // 如果光标在分割点之后，需要根据是否在"最后编辑区域"判断
+  const shouldPreserveCursor = cursorInFirstPart
+  
+  console.log(`Cursor analysis: cursorPos=${cursorPos}, splitPos=${splitPosition}, inFirstPart=${cursorInFirstPart}, shouldPreserve=${shouldPreserveCursor}`)
+  
+  return {
+    cursorPosition: cursorPos,
+    splitPosition,
+    cursorInFirstPart,
+    shouldPreserveCursor
+  }
 }
 
 // 合并两个文档内容

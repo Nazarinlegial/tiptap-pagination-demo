@@ -8,7 +8,6 @@ import {
   checkPageOverflowState, 
   canMergeUpward, 
   calculateSplitPoint, 
-  isCursorAtEnd, 
   isDeletingAtBeginning 
 } from './pageCalculations'
 
@@ -17,7 +16,8 @@ import {
   mergeDocumentContent, 
   documentToNodes, 
   splitNodesByCount, 
-  createEmptyDocument 
+  createEmptyDocument,
+  analyzeCursorPosition 
 } from './contentManagement'
 
 import { 
@@ -25,7 +25,8 @@ import {
   moveCursorToStart, 
   moveCursorToEnd, 
   restoreCursorPosition, 
-  isCursorAtEndPosition 
+  isCursorAtEndPosition,
+  shouldJumpToNextPage 
 } from './cursorManager'
 
 import { 
@@ -338,15 +339,16 @@ export function useMultiEditorPagination() {
     const doc = currentPageData.editor.state.doc
     const nodeCount = doc.content.childCount
 
-    // 检查用户光标是否在最后的内容区域
-    const isEditingAtEnd = isCursorAtEnd(currentPageData.editor)
+    // 保存当前光标位置
+    const originalCursorPos = currentPageData.editor.state.selection.from
 
-    console.log(`Cursor analysis: isEditingAtEnd=${isEditingAtEnd}`)
-
-    // 计算分割点
+    // 计算分割点（始终按节点边界分割）
     const splitPoint = calculateSplitPoint(nodeCount)
 
     console.log(`Splitting page ${pageIndex + 1}: total nodes=${nodeCount}, keeping first ${splitPoint} nodes`)
+
+    // 分析光标位置相对于分割点的关系
+    const cursorAnalysis = analyzeCursorPosition(currentPageData.editor, splitPoint)
 
     // 分割内容
     const { firstPageContent, overflowContent } = splitDocumentContent(doc, splitPoint)
@@ -355,8 +357,29 @@ export function useMultiEditorPagination() {
     currentPageData.editor.commands.setContent(firstPageContent)
     currentPageData.isAutoPaginating = false
 
-    // 处理溢出内容
-    handleOverflowContent(pageIndex, overflowContent, isEditingAtEnd)
+    // 根据光标分析结果处理光标位置
+    if (cursorAnalysis.shouldPreserveCursor && cursorAnalysis.cursorInFirstPart) {
+      // 光标在分割点之前，保持在原位置
+      nextTick(() => {
+        currentPageData.editor.commands.focus()
+        const newDocSize = currentPageData.editor.state.doc.content.size
+        const newCursorPos = Math.min(originalCursorPos, newDocSize - 1)
+        currentPageData.editor.commands.setTextSelection(newCursorPos)
+        console.log(`Cursor preserved at position ${newCursorPos} (was in first part)`)
+      })
+      
+      // 不跳转到下一页
+      handleOverflowContent(pageIndex, overflowContent, false)
+      
+    } else {
+      // 光标在分割点之后，或者用户在末尾编辑
+      const shouldMoveCursor = shouldJumpToNextPage(currentPageData.editor)
+      
+      console.log(`Cursor was in overflow part, shouldMoveCursor=${shouldMoveCursor}`)
+      
+      // 处理溢出内容，根据用户编辑上下文决定是否跳转
+      handleOverflowContent(pageIndex, overflowContent, shouldMoveCursor)
+    }
   }
 
   // 递归处理溢出内容

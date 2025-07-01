@@ -90,7 +90,7 @@ export const calculateSplitPoint = (nodeCount: number): number => {
   return Math.max(1, splitPoint)
 }
 
-// 检查光标是否在文档末尾编辑
+// 检查光标是否在文档末尾编辑（保留旧函数作为备用）
 export const isCursorAtEnd = (editor: any): boolean => {
   const selection = editor.state.selection
   const docSize = editor.state.doc.content.size
