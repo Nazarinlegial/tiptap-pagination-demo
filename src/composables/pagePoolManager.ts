@@ -7,7 +7,7 @@ import { createEditorInstance, deactivateEditor, clearEditorContent } from './ed
 // 页面数据结构
 export interface PageData {
   id: string
-  editor: Editor
+  editor: any // 使用 any 来兼容复杂的 Editor 类型
   hasOverflow: boolean
   contentHeight: number
   isAutoPaginating?: boolean
@@ -19,7 +19,7 @@ export interface PageData {
 
 // 创建页面数据
 export const createPageData = (
-  editor: Editor, 
+  editor: any, 
   isVisible: boolean = false, 
   isPreloaded: boolean = true
 ): PageData => {

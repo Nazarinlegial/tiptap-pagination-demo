@@ -20,7 +20,7 @@ export const generateEditorId = (): string => {
 }
 
 // 创建编辑器实例
-export const createEditorInstance = (config: EditorConfig): Editor => {
+export const createEditorInstance = (config: EditorConfig): any => {
   const editorId = generateEditorId()
   
   const editor = new Editor({
@@ -55,12 +55,12 @@ export const createEditorInstance = (config: EditorConfig): Editor => {
 }
 
 // 获取编辑器ID
-export const getEditorId = (editor: Editor): string => {
+export const getEditorId = (editor: any): string => {
   return (editor as any).editorId
 }
 
 // 设置编辑器内容（安全方式）
-export const setEditorContentSafely = (editor: Editor, content: any): void => {
+export const setEditorContentSafely = (editor: any, content: any): void => {
   if (content !== '<p></p>' && typeof content === 'object') {
     editor.commands.setContent('<p>Loading...</p>')
     
@@ -73,16 +73,16 @@ export const setEditorContentSafely = (editor: Editor, content: any): void => {
 }
 
 // 清空编辑器内容
-export const clearEditorContent = (editor: Editor): void => {
+export const clearEditorContent = (editor: any): void => {
   editor.commands.setContent('<p></p>')
 }
 
 // 激活编辑器（设为可编辑）
-export const activateEditor = (editor: Editor): void => {
+export const activateEditor = (editor: any): void => {
   editor.setOptions({ editable: true })
 }
 
 // 停用编辑器（设为不可编辑）
-export const deactivateEditor = (editor: Editor): void => {
+export const deactivateEditor = (editor: any): void => {
   editor.setOptions({ editable: false })
 } 
