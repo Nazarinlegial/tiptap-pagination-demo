@@ -18,14 +18,20 @@ import {
   type NodeData
 } from './pageCalculations'
 
+
+
 import { 
   splitDocumentContent, 
+  splitDocumentContentAsync,
   mergeDocumentContent, 
+  mergeDocumentContentAsync,
   documentToNodes, 
   splitNodesByCount, 
   createEmptyDocument,
   analyzeCursorPosition 
 } from './contentManagement'
+
+import { useWorkerOptimization } from './useWorkerOptimization'
 
 import { 
   getCursorPosition, 
@@ -63,6 +69,14 @@ export function useMultiEditorPagination() {
   const visiblePageCount = ref(1)
   const currentPageIndex = ref(0)
   const pageContentRefs = ref<(HTMLElement | null)[]>([])
+
+  // Worker 优化功能
+  const { 
+    isOptimizationEnabled,
+    backgroundAnalyzeDocument,
+    precalculatePagination,
+    batchProcessContent 
+  } = useWorkerOptimization()
 
   // 计算属性
   const visiblePages = computed(() => {
@@ -219,8 +233,8 @@ export function useMultiEditorPagination() {
       currentPageData.isAutoPaginating = true
       
       // 处理溢出内容
-      nextTick(() => {
-        handleOverflow(pageIndex)
+      nextTick(async () => {
+        await handleOverflow(pageIndex)
       })
       
     } else if (!hasOverflow) {
@@ -231,12 +245,14 @@ export function useMultiEditorPagination() {
       }
       
       // 检查是否可以向上合并下一页内容
-      checkForUpwardMerge(pageIndex, actualHeight)
+      checkForUpwardMerge(pageIndex, actualHeight).catch(error => {
+        console.warn('向上合并检查失败:', error)
+      })
     }
   }
 
   // 检查是否可以向上合并下一页内容
-  const checkForUpwardMerge = (pageIndex: number, currentHeight: number) => {
+  const checkForUpwardMerge = async (pageIndex: number, currentHeight: number) => {
     const visiblePagesArray = visiblePages.value
     // 获取下一页索引
     const nextPageIndex = pageIndex + 1
@@ -259,12 +275,12 @@ export function useMultiEditorPagination() {
     const { canMerge, nodesToMerge } = canMergeUpward(currentHeight, nextPageNodes, nextPageElement || undefined)
     // 如果可以合并，则合并下一页内容到当前页
     if (canMerge) {
-      mergeNextPageContent(pageIndex, nextPageIndex, nodesToMerge)
+      await mergeNextPageContent(pageIndex, nextPageIndex, nodesToMerge)
     }
   }
 
-  // 合并下一页内容到当前页
-  const mergeNextPageContent = (pageIndex: number, nextPageIndex: number, nodesToMerge: number) => {
+  // 合并下一页内容到当前页（支持 Worker 优化）
+  const mergeNextPageContent = async (pageIndex: number, nextPageIndex: number, nodesToMerge: number) => {
     // 获取当前页面数据
     const visiblePagesArray = visiblePages.value
     // 获取当前页面
@@ -303,11 +319,21 @@ export function useMultiEditorPagination() {
     const { firstPart: nodesToMergeArray, secondPart: remainingNodes } = 
       splitNodesByCount(nextNodes, nodesToMerge)
     
-    // 合并内容：当前页内容 + 合并的节点
-    const mergedContent = mergeDocumentContent(currentNodes, nodesToMergeArray)
-    
-    // 更新当前页内容
-    currentPage.editor.commands.setContent(mergedContent)
+    try {
+      // 🚀 使用 Worker 进行内容合并（如果可用）
+      const mergedContent = isOptimizationEnabled.value
+        ? await mergeDocumentContentAsync(currentNodes, nodesToMergeArray)
+        : mergeDocumentContent(currentNodes, nodesToMergeArray)
+      
+      // 更新当前页内容
+      currentPage.editor.commands.setContent(mergedContent)
+    } catch (error) {
+      console.warn('Worker 内容合并失败，使用同步方法:', error)
+      
+      // 降级到同步处理
+      const mergedContent = mergeDocumentContent(currentNodes, nodesToMergeArray)
+      currentPage.editor.commands.setContent(mergedContent)
+    }
     
     // 调试：记录内容更新后状态
     if (savedCursorInfo && savedCursorInfo.isActive) {
@@ -347,10 +373,21 @@ export function useMultiEditorPagination() {
     
     // 更新下一页内容
     if (remainingNodes.length > 0) {
-      // 合并剩余内容
-      const remainingContent = mergeDocumentContent([], remainingNodes)
-      // 更新下一页内容
-      nextPage.editor.commands.setContent(remainingContent)
+      try {
+        // 🚀 使用 Worker 进行剩余内容合并（如果可用）
+        const remainingContent = isOptimizationEnabled.value
+          ? await mergeDocumentContentAsync([], remainingNodes)
+          : mergeDocumentContent([], remainingNodes)
+        
+        // 更新下一页内容
+        nextPage.editor.commands.setContent(remainingContent)
+      } catch (error) {
+        console.warn('Worker 剩余内容合并失败，使用同步方法:', error)
+        
+        // 降级到同步处理
+        const remainingContent = mergeDocumentContent([], remainingNodes)
+        nextPage.editor.commands.setContent(remainingContent)
+      }
       
       
       // 递归检查下一页
@@ -385,8 +422,8 @@ export function useMultiEditorPagination() {
     })
   }
 
-  // 处理内容溢出
-  const handleOverflow = (pageIndex: number) => {
+  // 处理内容溢出（支持 Worker 优化）
+  const handleOverflow = async (pageIndex: number) => {
     // 获取当前页面数据
     const visiblePagesArray = visiblePages.value
     const currentPageData = visiblePagesArray[pageIndex]
@@ -412,46 +449,66 @@ export function useMultiEditorPagination() {
     // 计算分割点（始终按节点边界分割）
     const splitPoint = calculateSplitPoint(nodeCount)
 
-
     // 分析光标位置相对于分割点的关系
     const cursorAnalysis = analyzeCursorPosition(currentPageData.editor, splitPoint)
 
-    // 分割内容
-    const { firstPageContent, overflowContent } = splitDocumentContent(doc, splitPoint)
+    try {
+      // 🚀 使用 Worker 进行文档分割（如果可用）
+      const splitResult = isOptimizationEnabled.value 
+        ? await splitDocumentContentAsync(doc, splitPoint)
+        : splitDocumentContent(doc, splitPoint)
 
-    // 更新当前页面内容
-    currentPageData.editor.commands.setContent(firstPageContent)
-    currentPageData.isAutoPaginating = false
+      const { firstPageContent, overflowContent } = splitResult
 
-    // 根据光标分析结果处理光标位置
-    if (cursorAnalysis.shouldPreserveCursor && cursorAnalysis.cursorInFirstPart) {
-      // 光标在分割点之前，保持在原位置
-      nextTick(() => {
-        // 聚焦当前页面
-        currentPageData.editor.commands.focus()
-        // 获取当前页面文档节点数
-        const newDocSize = currentPageData.editor.state.doc.content.size
-        // 计算新的光标位置
-        const newCursorPos = Math.min(originalCursorPos, newDocSize - 1)
-        // 设置新的光标位置
-        currentPageData.editor.commands.setTextSelection(newCursorPos)
-      })
+      // 更新当前页面内容
+      currentPageData.editor.commands.setContent(firstPageContent)
+      currentPageData.isAutoPaginating = false
+
+      // 根据光标分析结果处理光标位置
+      if (cursorAnalysis.shouldPreserveCursor && cursorAnalysis.cursorInFirstPart) {
+        // 光标在分割点之前，保持在原位置
+        nextTick(() => {
+          // 聚焦当前页面
+          currentPageData.editor.commands.focus()
+          // 获取当前页面文档节点数
+          const newDocSize = currentPageData.editor.state.doc.content.size
+          // 计算新的光标位置
+          const newCursorPos = Math.min(originalCursorPos, newDocSize - 1)
+          // 设置新的光标位置
+          currentPageData.editor.commands.setTextSelection(newCursorPos)
+        })
+        
+        // 不跳转到下一页
+        await handleOverflowContent(pageIndex, overflowContent, false)
+        
+      } else {
+        // 光标在分割点之后，或者用户在末尾编辑
+        const shouldMoveCursor = shouldJumpToNextPage(currentPageData.editor)
+        
+        // 处理溢出内容，根据用户编辑上下文决定是否跳转
+        await handleOverflowContent(pageIndex, overflowContent, shouldMoveCursor)
+      }
+
+      // 🚀 后台分析文档（如果启用了优化）
+      if (isOptimizationEnabled.value && doc.content.childCount > 10) {
+        backgroundAnalyzeDocument(doc, (result) => {
+          console.log('📊 文档分析完成:', result)
+        })
+      }
+
+    } catch (error) {
+      console.warn('Worker 文档分割失败，使用同步方法:', error)
       
-      // 不跳转到下一页
-      handleOverflowContent(pageIndex, overflowContent, false)
-      
-    } else {
-      // 光标在分割点之后，或者用户在末尾编辑
-      const shouldMoveCursor = shouldJumpToNextPage(currentPageData.editor)
-      
-      
-      // 处理溢出内容，根据用户编辑上下文决定是否跳转
-      handleOverflowContent(pageIndex, overflowContent, shouldMoveCursor)
+      // 降级到同步处理
+      const { firstPageContent, overflowContent } = splitDocumentContent(doc, splitPoint)
+      currentPageData.editor.commands.setContent(firstPageContent)
+      currentPageData.isAutoPaginating = false
+      await handleOverflowContent(pageIndex, overflowContent, false)
     }
   }
 
-  // 递归处理溢出内容
-  const handleOverflowContent = (fromPageIndex: number, overflowNodes: any[], shouldMoveCursor: boolean = false) => {
+  // 递归处理溢出内容（支持 Worker 优化）
+  const handleOverflowContent = async (fromPageIndex: number, overflowNodes: any[], shouldMoveCursor: boolean = false) => {
     const nextPageIndex = fromPageIndex + 1
     const visiblePagesArray = visiblePages.value
 
@@ -460,12 +517,21 @@ export function useMultiEditorPagination() {
       const nextPage = visiblePagesArray[nextPageIndex]
       const nextPageNodes = documentToNodes(nextPage.editor.state.doc)
 
-      // 合并内容：溢出内容 + 原有内容
-      const mergedContent = mergeDocumentContent(overflowNodes, nextPageNodes)
+      try {
+        // 🚀 使用 Worker 进行内容合并（如果可用）
+        const mergedContent = isOptimizationEnabled.value
+          ? await mergeDocumentContentAsync(overflowNodes, nextPageNodes)
+          : mergeDocumentContent(overflowNodes, nextPageNodes)
 
-
-      // 更新下一页内容
-      nextPage.editor.commands.setContent(mergedContent)
+        // 更新下一页内容
+        nextPage.editor.commands.setContent(mergedContent)
+      } catch (error) {
+        console.warn('Worker 溢出内容合并失败，使用同步方法:', error)
+        
+        // 降级到同步处理
+        const mergedContent = mergeDocumentContent(overflowNodes, nextPageNodes)
+        nextPage.editor.commands.setContent(mergedContent)
+      }
 
       // 如果用户在编辑最后的内容，移动光标到下一页
       if (shouldMoveCursor) {
@@ -476,9 +542,20 @@ export function useMultiEditorPagination() {
       }
 
     } else {
-      // 创建新页面
-      const newPageContent = mergeDocumentContent([], overflowNodes)
-      activateNextPage(newPageContent, shouldMoveCursor)
+      try {
+        // 🚀 使用 Worker 创建新页面内容（如果可用）
+        const newPageContent = isOptimizationEnabled.value
+          ? await mergeDocumentContentAsync([], overflowNodes)
+          : mergeDocumentContent([], overflowNodes)
+        
+        activateNextPage(newPageContent, shouldMoveCursor)
+      } catch (error) {
+        console.warn('Worker 新页面内容创建失败，使用同步方法:', error)
+        
+        // 降级到同步处理
+        const newPageContent = mergeDocumentContent([], overflowNodes)
+        activateNextPage(newPageContent, shouldMoveCursor)
+      }
     }
   }
 
