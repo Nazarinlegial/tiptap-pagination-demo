@@ -8,7 +8,14 @@ import {
   checkPageOverflowState, 
   canMergeUpward, 
   calculateSplitPoint, 
-  isDeletingAtBeginning 
+  isDeletingAtBeginning,
+  extractNodeData,
+  getPageSizeDebugInfo,
+  analyzePageHeightRelation,
+  debugOverflowTrigger,
+  debugMergeAnalysis,
+  trackCursorDuringMerge,
+  type NodeData
 } from './pageCalculations'
 
 import { 
@@ -81,7 +88,6 @@ export function useMultiEditorPagination() {
     if (activePageIndex === -1) return
 
     nextTick(() => {
-      console.log(`Content updated in active page ${activePageIndex + 1}, checking overflow...`)
       
       // 检测删除操作和光标位置
       const editorId = (editor as any).editorId
@@ -92,7 +98,6 @@ export function useMultiEditorPagination() {
       const isAtBeginning = currentCursor.from <= 2
       const isNotFirstPage = activePageIndex > 0
       
-      console.log(`Delete analysis: isDeleting=${isDeleting}, cursorPosition=${currentCursor.from}, isAtBeginning=${isAtBeginning}, isNotFirstPage=${isNotFirstPage}`)
       
       // 更新内容大小记录
       previousContentSizes.set(editorId, currentContentSize)
@@ -103,7 +108,6 @@ export function useMultiEditorPagination() {
         const currentPageHasContent = editor.getText().trim().length > 0
         
         if (currentPageHasContent) {
-          console.log(`Moving cursor to previous page ${activePageIndex} due to deletion at beginning`)
           
           const previousPageIndex = activePageIndex - 1
           const previousPage = visiblePagesArray[previousPageIndex]
@@ -113,7 +117,6 @@ export function useMultiEditorPagination() {
             
             nextTick(() => {
               moveCursorToEnd(previousPage.editor)
-              console.log(`Cursor moved to end of page ${previousPageIndex + 1}`)
             })
             
             return
@@ -126,14 +129,11 @@ export function useMultiEditorPagination() {
       const isFirstPage = activePageIndex === 0
       const hasMultiplePages = visiblePageCount.value > 1
       
-      console.log(`Page ${activePageIndex + 1} empty check: isEmpty=${isEmpty}, textLength=${editor.getText().trim().length}`)
       
       if (isEmpty && !isFirstPage && hasMultiplePages) {
-        console.log(`Page ${activePageIndex + 1} is truly empty, deleting and moving to previous page`)
         deleteCurrentEmptyPage()
         return
       }
-      
       checkPageOverflow(activePageIndex)
     })
   }
@@ -146,7 +146,6 @@ export function useMultiEditorPagination() {
       const visiblePagesArray = visiblePages.value
       const pageIndex = visiblePagesArray.findIndex(p => p.editorId === dataEditorId)
       if (pageIndex !== -1 && pageIndex !== currentPageIndex.value) {
-        console.log(`Selection switched to page ${pageIndex + 1}`)
         currentPageIndex.value = pageIndex
       }
     }
@@ -161,7 +160,6 @@ export function useMultiEditorPagination() {
   // 动态扩容页面池
   const expandPagePoolIfNeeded = () => {
     if (shouldExpandPool(visiblePageCount.value, preloadedPagePool.value.length)) {
-      console.log(`触发动态扩容，当前池大小: ${preloadedPagePool.value.length}`)
       
       if (window.requestIdleCallback) {
         window.requestIdleCallback(() => {
@@ -186,41 +184,47 @@ export function useMultiEditorPagination() {
   // 检查页面内容是否溢出
   const checkPageOverflow = (pageIndex: number) => {
     const visiblePagesArray = visiblePages.value
+    // 检查页面索引是否有效
     if (pageIndex < 0 || pageIndex >= visiblePagesArray.length) return
     
+    // 获取当前页面数据
     const currentPageData = visiblePagesArray[pageIndex]
     if (!currentPageData) return
 
+    // 获取页面内容元素
     const contentEl = pageContentRefs.value[pageIndex]
     if (!contentEl) return
 
+    // 检查页面内容是否溢出
     const { hasOverflow, actualHeight } = checkPageOverflowState(contentEl)
 
+    // 更新页面数据
     currentPageData.hasOverflow = hasOverflow
     currentPageData.contentHeight = actualHeight
 
-    console.log(`Page ${pageIndex + 1}: height=${actualHeight}, overflow=${hasOverflow}`)
-
+    // 如果页面溢出且是当前页面，则进行分页
     if (hasOverflow && pageIndex === currentPageIndex.value) {
+      // 获取页面分页次数
       const paginationCount = currentPageData.paginationCount || 0
-      
+      // 如果页面分页次数大于等于3次，则停止自动分页
       if (paginationCount >= 3) {
-        console.warn(`Page ${pageIndex + 1} has been paginated ${paginationCount} times, stopping auto-pagination`)
         return
       }
 
+      // 如果页面正在自动分页，则不进行分页
       if (currentPageData.isAutoPaginating) {
         return
       }
 
-      console.log(`Content overflow detected, immediately paginating page ${pageIndex + 1}`)
       currentPageData.isAutoPaginating = true
       
+      // 处理溢出内容
       nextTick(() => {
         handleOverflow(pageIndex)
       })
       
     } else if (!hasOverflow) {
+      // 如果页面不溢出，则停止自动分页
       if (currentPageData) {
         currentPageData.isAutoPaginating = false
         currentPageData.paginationCount = 0
@@ -234,79 +238,130 @@ export function useMultiEditorPagination() {
   // 检查是否可以向上合并下一页内容
   const checkForUpwardMerge = (pageIndex: number, currentHeight: number) => {
     const visiblePagesArray = visiblePages.value
+    // 获取下一页索引
     const nextPageIndex = pageIndex + 1
-    
+    // 如果下一页索引超出页面池，则不进行合并
     if (nextPageIndex >= visiblePagesArray.length) return
     
+    // 获取下一页数据
     const nextPage = visiblePagesArray[nextPageIndex]
+    // 如果下一页不存在或不可见，则不进行合并
     if (!nextPage || !nextPage.isVisible) return
     
-    const nextPageDoc = nextPage.editor.state.doc
-    const nextPageNodeCount = nextPageDoc.content.childCount
+    // 获取下一页的DOM元素
+    const nextPageElement = pageContentRefs.value[nextPageIndex]
     
-    const { canMerge, nodesToMerge } = canMergeUpward(currentHeight, nextPageNodeCount)
+    // 提取下一页的节点数据
+    const nextPageNodes = extractNodeData(nextPage.editor)
     
+    
+    // 检查是否可以向上合并（传入节点数据和DOM元素）
+    const { canMerge, nodesToMerge } = canMergeUpward(currentHeight, nextPageNodes, nextPageElement || undefined)
+    // 如果可以合并，则合并下一页内容到当前页
     if (canMerge) {
-      console.log(`Attempting to merge ${nodesToMerge} nodes from page ${nextPageIndex + 1} to page ${pageIndex + 1}`)
       mergeNextPageContent(pageIndex, nextPageIndex, nodesToMerge)
     }
   }
 
   // 合并下一页内容到当前页
   const mergeNextPageContent = (pageIndex: number, nextPageIndex: number, nodesToMerge: number) => {
+    // 获取当前页面数据
     const visiblePagesArray = visiblePages.value
+    // 获取当前页面
     const currentPage = visiblePagesArray[pageIndex]
+    // 获取下一页数据
     const nextPage = visiblePagesArray[nextPageIndex]
     
     if (!currentPage || !nextPage) return
     
-    // 保存当前光标位置
-    let savedCursorPosition = 0
+    // 保存光标位置信息
+    let savedCursorInfo: { position: number, contentSize: number, isActive: boolean } | null = null
     const activePageIndex = currentPageIndex.value
     const isCurrentlyActiveEditor = pageIndex === activePageIndex
+    
+    // 如果当前页面是活动页面，保存详细的光标信息
     if (isCurrentlyActiveEditor) {
-      savedCursorPosition = getCursorPosition(currentPage.editor).from
-      console.log(`Saving cursor position: ${savedCursorPosition} before merge`)
+      const cursorPos = getCursorPosition(currentPage.editor)
+      const currentContentSize = currentPage.editor.state.doc.content.size
+      
+      savedCursorInfo = {
+        position: cursorPos.from,
+        contentSize: currentContentSize,
+        isActive: true
+      }
+      
+             // 调试：记录合并前状态
+       const beforeMerge = trackCursorDuringMerge(currentPage.editor, '合并前')
+       console.log('🔍 合并前光标状态:', beforeMerge)
     }
     
     // 获取内容节点
     const currentNodes = documentToNodes(currentPage.editor.state.doc)
+    // 获取下一页内容节点
     const nextNodes = documentToNodes(nextPage.editor.state.doc)
-    
+    // 分割下一页内容
     const { firstPart: nodesToMergeArray, secondPart: remainingNodes } = 
       splitNodesByCount(nextNodes, nodesToMerge)
     
-    // 合并内容
+    // 合并内容：当前页内容 + 合并的节点
     const mergedContent = mergeDocumentContent(currentNodes, nodesToMergeArray)
     
     // 更新当前页内容
     currentPage.editor.commands.setContent(mergedContent)
     
-    // 恢复光标位置
-    if (isCurrentlyActiveEditor) {
+    // 调试：记录内容更新后状态
+    if (savedCursorInfo && savedCursorInfo.isActive) {
+      setTimeout(() => {
+        const afterContent = trackCursorDuringMerge(currentPage.editor, '内容更新后')
+        console.log('📝 内容更新后光标状态:', afterContent)
+      }, 10)
+    }
+    
+    // 智能恢复光标位置
+    if (savedCursorInfo && savedCursorInfo.isActive) {
       nextTick(() => {
-        restoreCursorPosition(currentPage.editor, savedCursorPosition)
+        const newContentSize = currentPage.editor.state.doc.content.size
+        
+        // 光标位置应该保持在原始内容范围内，不受合并内容影响
+        // 因为合并的内容是添加到当前内容之后的
+        let targetPosition = savedCursorInfo.position
+        
+        // 确保位置在有效范围内
+        const maxValidPosition = Math.min(savedCursorInfo.contentSize - 1, newContentSize - 1)
+        targetPosition = Math.min(targetPosition, maxValidPosition)
+        targetPosition = Math.max(1, targetPosition) // 至少在位置1
+        
+                 console.log(`🎯 光标位置计算: 原位置=${savedCursorInfo.position}, 目标位置=${targetPosition}, 新内容大小=${newContentSize}`)
+         
+         // 聚焦编辑器并设置光标位置
+         currentPage.editor.commands.focus()
+         currentPage.editor.commands.setTextSelection(targetPosition)
+         
+         // 调试：记录最终恢复后状态
+         setTimeout(() => {
+           const afterRestore = trackCursorDuringMerge(currentPage.editor, '光标恢复后')
+           console.log('✅ 光标恢复后状态:', afterRestore)
+         }, 20)
       })
     }
     
     // 更新下一页内容
     if (remainingNodes.length > 0) {
+      // 合并剩余内容
       const remainingContent = mergeDocumentContent([], remainingNodes)
+      // 更新下一页内容
       nextPage.editor.commands.setContent(remainingContent)
       
-      console.log(`Merged ${nodesToMerge} nodes from page ${nextPageIndex + 1} to page ${pageIndex + 1}`)
       
       // 递归检查下一页
       nextTick(() => {
         setTimeout(() => {
-          console.log(`Recursively checking page ${nextPageIndex + 1} for further merging`)
           checkPageOverflow(nextPageIndex)
         }, 100)
       })
       
     } else {
       // 隐藏空页面
-      console.log(`All content from page ${nextPageIndex + 1} merged, hiding empty page`)
       nextPage.isVisible = false
       clearEditorContent(nextPage.editor)
       
@@ -314,19 +369,28 @@ export function useMultiEditorPagination() {
       visiblePageCount.value = visiblePagesList.length
     }
     
-    // 重新检查当前页是否溢出
+    // 重新检查当前页是否溢出（延迟执行，避免干扰光标位置）
     nextTick(() => {
       setTimeout(() => {
-        console.log(`Checking page ${pageIndex + 1} for overflow after merge`)
-        checkPageOverflow(pageIndex)
-      }, 150)
+        // 只有当不是活动页面时才检查溢出，避免干扰用户正在编辑的页面
+        if (pageIndex !== currentPageIndex.value) {
+          checkPageOverflow(pageIndex)
+        } else {
+          // 如果是活动页面，延迟更久再检查，给光标恢复更多时间
+          setTimeout(() => {
+            checkPageOverflow(pageIndex)
+          }, 300)
+        }
+      }, 100)
     })
   }
 
   // 处理内容溢出
   const handleOverflow = (pageIndex: number) => {
+    // 获取当前页面数据
     const visiblePagesArray = visiblePages.value
     const currentPageData = visiblePagesArray[pageIndex]
+    // 如果当前页面不存在或不溢出，则不进行分页
     if (!currentPageData || !currentPageData.hasOverflow) {
       if (currentPageData) {
         currentPageData.isAutoPaginating = false
@@ -334,9 +398,12 @@ export function useMultiEditorPagination() {
       return
     }
 
+    // 更新页面分页次数
     currentPageData.paginationCount = (currentPageData.paginationCount || 0) + 1
 
+    // 获取当前页面文档
     const doc = currentPageData.editor.state.doc
+    // 获取当前页面文档节点数
     const nodeCount = doc.content.childCount
 
     // 保存当前光标位置
@@ -345,7 +412,6 @@ export function useMultiEditorPagination() {
     // 计算分割点（始终按节点边界分割）
     const splitPoint = calculateSplitPoint(nodeCount)
 
-    console.log(`Splitting page ${pageIndex + 1}: total nodes=${nodeCount}, keeping first ${splitPoint} nodes`)
 
     // 分析光标位置相对于分割点的关系
     const cursorAnalysis = analyzeCursorPosition(currentPageData.editor, splitPoint)
@@ -361,11 +427,14 @@ export function useMultiEditorPagination() {
     if (cursorAnalysis.shouldPreserveCursor && cursorAnalysis.cursorInFirstPart) {
       // 光标在分割点之前，保持在原位置
       nextTick(() => {
+        // 聚焦当前页面
         currentPageData.editor.commands.focus()
+        // 获取当前页面文档节点数
         const newDocSize = currentPageData.editor.state.doc.content.size
+        // 计算新的光标位置
         const newCursorPos = Math.min(originalCursorPos, newDocSize - 1)
+        // 设置新的光标位置
         currentPageData.editor.commands.setTextSelection(newCursorPos)
-        console.log(`Cursor preserved at position ${newCursorPos} (was in first part)`)
       })
       
       // 不跳转到下一页
@@ -375,7 +444,6 @@ export function useMultiEditorPagination() {
       // 光标在分割点之后，或者用户在末尾编辑
       const shouldMoveCursor = shouldJumpToNextPage(currentPageData.editor)
       
-      console.log(`Cursor was in overflow part, shouldMoveCursor=${shouldMoveCursor}`)
       
       // 处理溢出内容，根据用户编辑上下文决定是否跳转
       handleOverflowContent(pageIndex, overflowContent, shouldMoveCursor)
@@ -395,7 +463,6 @@ export function useMultiEditorPagination() {
       // 合并内容：溢出内容 + 原有内容
       const mergedContent = mergeDocumentContent(overflowNodes, nextPageNodes)
 
-      console.log(`Inserting ${overflowNodes.length} nodes to existing page ${nextPageIndex + 1}`)
 
       // 更新下一页内容
       nextPage.editor.commands.setContent(mergedContent)
@@ -403,7 +470,6 @@ export function useMultiEditorPagination() {
       // 如果用户在编辑最后的内容，移动光标到下一页
       if (shouldMoveCursor) {
         nextTick(() => {
-          console.log(`Moving cursor to page ${nextPageIndex + 1} after pagination`)
           currentPageIndex.value = nextPageIndex
           moveCursorToStart(nextPage.editor)
         })
@@ -412,7 +478,6 @@ export function useMultiEditorPagination() {
     } else {
       // 创建新页面
       const newPageContent = mergeDocumentContent([], overflowNodes)
-      console.log(`Creating new page for ${overflowNodes.length} overflow nodes`)
       activateNextPage(newPageContent, shouldMoveCursor)
     }
   }
@@ -420,37 +485,38 @@ export function useMultiEditorPagination() {
   // 激活下一个预创建的页面
   const activateNextPage = (content: any = '<p></p>', shouldMoveCursor: boolean = false) => {
     expandPagePoolIfNeeded()
-    
+    // 获取下一个页面索引
     const nextPageIndex = visiblePageCount.value
+    // 如果下一个页面索引小于预创建页面池长度，则激活下一个页面
     if (nextPageIndex < preloadedPagePool.value.length) {
       const nextPage = preloadedPagePool.value[nextPageIndex]
-      
+      // 激活下一个页面
       activatePage(nextPage)
+      // 更新可见页面数
       visiblePageCount.value++
-      
+      // 如果需要移动光标，则设置当前页面索引
       if (shouldMoveCursor) {
         currentPageIndex.value = nextPageIndex
       }
       
-      console.log(`激活预创建页面 ${nextPageIndex + 1}，当前可见页面数: ${visiblePageCount.value}`)
       
       if (shouldMoveCursor) {
+        // 聚焦下一个页面
         nextPage.editor.commands.focus()
       }
       
       nextTick(() => {
+        // 设置下一个页面内容
         setEditorContentSafely(nextPage.editor, content)
-        
+        // 如果需要移动光标，则移动光标到下一个页面
         if (shouldMoveCursor) {
           setTimeout(() => {
             moveCursorToStart(nextPage.editor)
-            console.log(`Cursor moved to new page ${nextPageIndex + 1}`)
           }, 20)
         }
         
         setTimeout(() => {
           if (content.content && content.content.length > 3) {
-            console.log(`Checking overflow for newly activated page with content`)
             checkPageOverflow(nextPageIndex)
           }
         }, 100)
@@ -478,7 +544,6 @@ export function useMultiEditorPagination() {
     const visiblePagesArray = visiblePages.value
     const pageToHide = visiblePagesArray[currentIndex]
     
-    console.log(`Deleting empty page ${currentIndex + 1}`)
     
     deactivatePage(pageToHide)
     visiblePageCount.value--
@@ -486,7 +551,6 @@ export function useMultiEditorPagination() {
     const newIndex = currentIndex - 1
     currentPageIndex.value = newIndex
     
-    console.log(`Moved to previous page ${newIndex + 1}, visible pages: ${visiblePageCount.value}`)
     
     nextTick(() => {
       currentEditor.value?.commands.focus()
@@ -514,7 +578,6 @@ export function useMultiEditorPagination() {
       currentPageIndex.value = visiblePageCount.value - 1
     }
     
-    console.log(`隐藏页面，当前可见页面数: ${visiblePageCount.value}`)
     
     nextTick(() => {
       currentEditor.value?.commands.focus()
@@ -524,7 +587,6 @@ export function useMultiEditorPagination() {
   // 设置当前页面
   const setCurrentPage = (index: number) => {
     const previousIndex = currentPageIndex.value
-    console.log(`Switching from page ${previousIndex + 1} to page ${index + 1}`)
     currentPageIndex.value = index
     
     nextTick(() => {
@@ -533,7 +595,6 @@ export function useMultiEditorPagination() {
       if (previousIndex !== index) {
         const visiblePagesArray = visiblePages.value
         if (visiblePagesArray[index]) {
-          console.log(`Switched to page ${index + 1}, checking its overflow status...`)
           nextTick(() => {
             checkPageOverflow(index)
           })
@@ -568,13 +629,11 @@ export function useMultiEditorPagination() {
       const page = visiblePagesArray[pageIndex]
       page.paginationCount = 0
       page.isAutoPaginating = false
-      console.log(`Reset pagination count for page ${pageIndex + 1}`)
     } else {
       visiblePagesArray.forEach((page, index) => {
         page.paginationCount = 0
         page.isAutoPaginating = false
       })
-      console.log('Reset pagination count for all visible pages')
     }
   }
 
@@ -588,7 +647,6 @@ export function useMultiEditorPagination() {
 
   // 初始化
   const initialize = () => {
-    console.log('多编辑器分页系统初始化中...')
     
     preloadPages(PAGE_CONFIG.INITIAL_PRELOAD_COUNT)
     
@@ -668,6 +726,13 @@ export function useMultiEditorPagination() {
     setPageContentRef,
     checkPageOverflow,
     initialize,
-    cleanup
+    cleanup,
+    
+    // 调试工具
+    getPageSizeDebugInfo,
+    analyzePageHeightRelation,
+    debugOverflowTrigger,
+    debugMergeAnalysis,
+    trackCursorDuringMerge
   }
 } 

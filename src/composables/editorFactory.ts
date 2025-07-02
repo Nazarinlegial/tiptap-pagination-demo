@@ -4,6 +4,7 @@ import { Editor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import TextStyle from '@tiptap/extension-text-style'
 import Color from '@tiptap/extension-color'
+import { NodeIdExtension } from '../extensions/NodeIdExtension'
 
 // 编辑器配置选项
 export interface EditorConfig {
@@ -29,6 +30,7 @@ export const createEditorInstance = (config: EditorConfig): any => {
       StarterKit,
       TextStyle,
       Color,
+      NodeIdExtension,
     ],
     editorProps: {
       attributes: {
@@ -38,7 +40,6 @@ export const createEditorInstance = (config: EditorConfig): any => {
     },
     onCreate: ({ editor }) => {
       if (config.isPreloaded) {
-        console.log(`预创建编辑器实例已创建`)
       }
       config.onCreate?.(editor)
     },

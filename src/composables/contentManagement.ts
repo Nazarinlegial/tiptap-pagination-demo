@@ -8,10 +8,10 @@ export interface ContentSplitResult {
 
 // 光标位置分析结果
 export interface CursorAnalysisResult {
-  cursorPosition: number
-  splitPosition: number
-  cursorInFirstPart: boolean
-  shouldPreserveCursor: boolean
+  cursorPosition: number//光标位置
+  splitPosition: number//分割点位置
+  cursorInFirstPart: boolean//光标是否在分割点之前
+  shouldPreserveCursor: boolean//是否保持光标在原位置
 }
 
 // 将文档内容按指定分割点分割
@@ -64,7 +64,6 @@ export const analyzeCursorPosition = (editor: any, splitPoint: number): CursorAn
   // 如果光标在分割点之后，需要根据是否在"最后编辑区域"判断
   const shouldPreserveCursor = cursorInFirstPart
   
-  console.log(`Cursor analysis: cursorPos=${cursorPos}, splitPos=${splitPosition}, inFirstPart=${cursorInFirstPart}, shouldPreserve=${shouldPreserveCursor}`)
   
   return {
     cursorPosition: cursorPos,

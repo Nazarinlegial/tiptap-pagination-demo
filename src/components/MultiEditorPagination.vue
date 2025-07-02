@@ -298,9 +298,11 @@ onBeforeUnmount(() => {
 
 .page-content {
   padding: 60px;
-  min-height: 943px; /* A4内容区域高度 */
-  max-height: 943px;
+  /* 调整高度计算：A4总高度(1123px) - 上下padding(120px) - 页码区域预留(60px) = 943px */
+  min-height: calc(1123px - 120px - 60px); /* 943px */
+  max-height: calc(1123px - 120px - 60px); /* 943px */
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .page-number {

@@ -89,7 +89,6 @@ export const isCursorAtLastNode = (editor: any): boolean => {
   const cursorPositionInNode = from - nodeStartPos
   const isInLastHalfOfNode = cursorPositionInNode > nodeLength * 0.7 // 在节点的后70%位置
   
-  console.log(`Cursor analysis: nodeCount=${nodeCount}, nodeStartPos=${nodeStartPos}, nodeEndPos=${nodeEndPos}, cursorPos=${from}, isInLastNode=${isInLastNode}, isInLastHalf=${isInLastHalfOfNode}`)
   
   return isInLastHalfOfNode
 }
@@ -123,7 +122,6 @@ export const isCursorAtLastLine = (editor: any): boolean => {
       
       const isLastParagraph = Math.abs(currentParagraphPos - lastParagraph.pos) < 2
       
-      console.log(`Last line analysis: totalParagraphs=${paragraphs.length}, currentPos=${currentParagraphPos}, lastParagraphPos=${lastParagraph.pos}, isLastParagraph=${isLastParagraph}`)
       
       return isLastParagraph
     }
@@ -144,7 +142,6 @@ export const shouldJumpToNextPage = (editor: any): boolean => {
   //const shouldJump = isAtLastNode && isAtLastLine
   const shouldJump = isAtLastLine
   
-  console.log(`Should jump to next page: isAtLastNode=${isAtLastLine}, isAtLastLine=${isAtLastLine}, result=${shouldJump}`)
   
   return shouldJump
 } 

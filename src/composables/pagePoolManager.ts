@@ -42,7 +42,6 @@ export const createPagePool = (
   onUpdate: (editor: any) => void,
   onSelectionUpdate: (editor: any) => void
 ): PageData[] => {
-  console.log(`预创建 ${count} 个编辑器实例...`)
   const startTime = performance.now()
   
   const pool: PageData[] = []
@@ -67,7 +66,6 @@ export const createPagePool = (
   }
   
   const endTime = performance.now()
-  console.log(`预创建完成，耗时: ${(endTime - startTime).toFixed(2)}ms`)
   
   return pool
 }
@@ -78,7 +76,6 @@ export const expandPagePool = (
   onUpdate: (editor: any) => void,
   onSelectionUpdate: (editor: any) => void
 ): PageData[] => {
-  console.log(`触发动态扩容，当前池大小: ${currentPool.length}`)
   
   const newPages = createPagePool(PAGE_CONFIG.EXPAND_COUNT, onUpdate, onSelectionUpdate)
   
@@ -132,7 +129,6 @@ export const deactivatePage = (page: PageData): void => {
 
 // 清理页面池
 export const cleanupPagePool = (pool: PageData[]): void => {
-  console.log('清理编辑器实例池...')
   pool.forEach(page => {
     page.editor.destroy()
   })
