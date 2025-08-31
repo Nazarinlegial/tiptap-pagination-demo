@@ -99,7 +99,7 @@ const MultiEditorPagination: React.FC = () => {
           </div>
 
           {/* Reset pagination count */}
-          {currentPage && currentPage.paginationCount && currentPage.paginationCount > 0 && (
+          {currentPage && currentPage.paginationCount && currentPage.paginationCount > 0 ? (
             <>
               <div className="toolbar-separator"></div>
               <div className="toolbar-group">
@@ -113,7 +113,7 @@ const MultiEditorPagination: React.FC = () => {
                 </button>
               </div>
             </>
-          )}
+          ) : null}
         </div>
       </div>
 

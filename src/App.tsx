@@ -1,5 +1,5 @@
 import React from 'react'
-import { Document, Mail, Github } from 'lucide-react'
+import { FileText, Mail, Github } from 'lucide-react'
 import MultiEditorPagination from './components/MultiEditorPagination'
 
 const App: React.FC = () => {
@@ -19,7 +19,7 @@ const App: React.FC = () => {
           <div className="title-section">
             <div className="flex flex-col gap-1">
               <h1 className="app-title">
-                <Document className="title-icon" size={24} />
+                <FileText className="title-icon" size={24} />
                 Tiptap分页编辑器
               </h1>
               <p className="app-subtitle">模块化架构的智能分页富文本编辑器</p>
