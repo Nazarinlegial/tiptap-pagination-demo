@@ -152,3 +152,10 @@ const MultiEditorPagination: React.FC = () => {
               )}
             </div>
           </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export default MultiEditorPagination
