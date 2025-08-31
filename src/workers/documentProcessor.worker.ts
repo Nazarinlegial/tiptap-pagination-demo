@@ -1,5 +1,5 @@
-// 文档处理 Web Worker
-// 处理文档分析、内容分割、合并等计算密集型任务
+// Document processing Web Worker
+// Handle document analysis, content splitting, merging and other compute-intensive tasks
 
 export interface DocumentWorkerMessage {
   id: string
@@ -15,13 +15,13 @@ export interface DocumentWorkerResponse {
   error?: string
 }
 
-// 文档分割结果类型
+// Document split result type
 interface ContentSplitResult {
   firstPageContent: any
   overflowContent: any[]
 }
 
-// 分割文档内容
+// Split document content
 const splitDocumentContent = (doc: any, splitPoint: number): ContentSplitResult => {
   const firstPageNodes: any[] = []
   const overflowNodes: any[] = []
@@ -47,7 +47,7 @@ const splitDocumentContent = (doc: any, splitPoint: number): ContentSplitResult 
   return { firstPageContent, overflowContent: overflowNodes }
 }
 
-// 合并文档内容
+// Merge document content
 const mergeDocumentContent = (firstNodes: any[], secondNodes: any[]): any => {
   return {
     type: 'doc',
@@ -55,7 +55,7 @@ const mergeDocumentContent = (firstNodes: any[], secondNodes: any[]): any => {
   }
 }
 
-// 分析文档节点
+// Analyze document nodes
 const analyzeDocumentNodes = (doc: any) => {
   const nodes: any[] = []
   const stats = {
@@ -77,23 +77,23 @@ const analyzeDocumentNodes = (doc: any) => {
 
       stats.totalNodes++
       
-      // 统计不同类型的节点
+      // Count different types of nodes
       switch (node.type) {
         case 'paragraph':
           stats.paragraphs++
-          stats.estimatedHeight += 40 // 预估段落高度
+          stats.estimatedHeight += 40 // Estimated paragraph height
           break
         case 'heading':
           stats.headings++
-          stats.estimatedHeight += 60 // 预估标题高度
+          stats.estimatedHeight += 60 // Estimated heading height
           break
         case 'bulletList':
         case 'orderedList':
           stats.lists++
-          stats.estimatedHeight += 30 * (node.content?.length || 1) // 预估列表高度
+          stats.estimatedHeight += 30 * (node.content?.length || 1) // Estimated list height
           break
         default:
-          stats.estimatedHeight += 50 // 其他节点默认高度
+          stats.estimatedHeight += 50 // Default height for other nodes
       }
     })
   }
@@ -101,33 +101,33 @@ const analyzeDocumentNodes = (doc: any) => {
   return { nodes, stats }
 }
 
-// 计算最优分割点
+// Calculate optimal split point
 const calculateOptimalSplitPoint = (nodeCount: number, targetHeight: number = 943): number => {
-  // 基于节点数量和目标高度计算最优分割点
+  // Calculate optimal split point based on node count and target height
   let splitPoint = Math.max(1, nodeCount - 1)
   
-  // 根据节点数量调整策略
+  // Adjust strategy based on node count
   if (nodeCount > 20) {
-    splitPoint = Math.floor(nodeCount * 0.8) // 保留80%内容
+    splitPoint = Math.floor(nodeCount * 0.8) // Keep 80% content
   } else if (nodeCount > 10) {
-    splitPoint = nodeCount - 2 // 移动最后2个节点
+    splitPoint = nodeCount - 2 // Move last 2 nodes
   } else if (nodeCount > 5) {
-    splitPoint = nodeCount - 1 // 移动最后1个节点
+    splitPoint = nodeCount - 1 // Move last 1 node
   } else {
-    splitPoint = Math.max(1, nodeCount - 1) // 至少保留1个节点
+    splitPoint = Math.max(1, nodeCount - 1) // Keep at least 1 node
   }
   
   return splitPoint
 }
 
-// 按数量分割节点
+// Split nodes by count
 const splitNodesByCount = (nodes: any[], splitCount: number) => {
   const firstPart = nodes.slice(0, splitCount)
   const secondPart = nodes.slice(splitCount)
   return { firstPart, secondPart }
 }
 
-// Worker 消息处理
+// Worker message handling
 self.onmessage = (event: MessageEvent<DocumentWorkerMessage>) => {
   const { id, type, payload } = event.data
   console.log('Worker 收到消息:', { id, type, payload })
@@ -158,7 +158,7 @@ self.onmessage = (event: MessageEvent<DocumentWorkerMessage>) => {
         throw new Error(`Unknown message type: ${type}`)
     }
 
-    // 发送成功响应
+    // Send success response
     const response: DocumentWorkerResponse = {
       id,
       type,
@@ -169,7 +169,7 @@ self.onmessage = (event: MessageEvent<DocumentWorkerMessage>) => {
     self.postMessage(response)
     
   } catch (error) {
-    // 发送错误响应
+    // Send error response
     const response: DocumentWorkerResponse = {
       id,
       type,
@@ -179,4 +179,4 @@ self.onmessage = (event: MessageEvent<DocumentWorkerMessage>) => {
     
     self.postMessage(response)
   }
-} 
+}

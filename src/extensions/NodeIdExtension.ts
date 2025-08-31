@@ -1,12 +1,12 @@
 import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 
-// 生成唯一ID的函数
+// Generate unique ID function
 function generateNodeId(): string {
   return `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
-// 节点ID扩展
+// Node ID extension
 export const NodeIdExtension = Extension.create({
   name: 'nodeId',
 
@@ -50,12 +50,12 @@ export const NodeIdExtension = Extension.create({
       new Plugin({
         key: new PluginKey('nodeId'),
         appendTransaction: (transactions, oldState, newState) => {
-          // 检查是否有新节点需要添加ID
+          // Check if new nodes need ID added
           let tr = newState.tr
           let modified = false
 
           newState.doc.descendants((node, pos) => {
-            // 如果节点没有ID，添加一个
+            // If node has no ID, add one
             if (node.isBlock && !node.attrs.id) {
               const id = generateNodeId()
               tr.setNodeMarkup(pos, undefined, { ...node.attrs, id })
@@ -68,4 +68,4 @@ export const NodeIdExtension = Extension.create({
       }),
     ]
   },
-}) 
+})
